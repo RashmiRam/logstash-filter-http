@@ -3,8 +3,11 @@ require 'logstash/filters/http'
 
 describe LogStash::Filters::Http do
   subject { described_class.new(config) }
+  let(:events) { [LogStash::Event.new(data), LogStash::Event.new(data_another), LogStash::Event.new(data_other)] }
   let(:event) { LogStash::Event.new(data) }
   let(:data) { { "message" => "test" } }
+  let(:data_another) { { "message" => "another_test" } }
+  let(:data_other) { { "message" => "other_test" } }
 
   describe 'response body handling' do
     before(:each) { subject.register }
@@ -15,6 +18,7 @@ describe LogStash::Filters::Http do
     before(:each) do
       allow(subject).to receive(:request_http).and_return(response)
       subject.filter(event)
+      subject.multi_filter(events)
     end
 
     context "when body is text" do
@@ -22,6 +26,9 @@ describe LogStash::Filters::Http do
 
       it "fetches and writes body to target" do
         expect(event.get('rest')).to eq("Bom dia")
+        events.each do |event|
+          expect(event.get('rest')).to eq("Bom dia")
+        end
       end
     end
     context "when body is JSON" do
@@ -30,6 +37,9 @@ describe LogStash::Filters::Http do
 
         it "fetches and writes body to target" do
           expect(event.get('[rest][id]')).to eq(10)
+          events.each do |event|
+            expect(event.get('[rest][id]')).to eq(10)
+          end
         end
       end
     end
@@ -43,8 +53,9 @@ describe LogStash::Filters::Http do
       let(:response) { [200, {}, "4"] }
 
       it "interpolates request url using event data" do
-        expect(subject).to receive(:request_http).with(anything, "http://stringsize.com/test", anything).and_return(response)
+        expect(subject).to receive(:request_http).with(anything, "http://stringsize.com/test", anything).and_return(response).twice
         subject.filter(event)
+        subject.multi_filter(events)
       end
     end
   end
@@ -59,13 +70,18 @@ describe LogStash::Filters::Http do
     let(:response) { [404, {}, ""] }
 
     before(:each) do
-      allow(subject).to receive(:request_http).and_return(response)
+      allow(subject).to receive(:request_http).and_return(response).twice
       subject.filter(event)
+      subject.multi_filter(events)
     end
 
     it "tags the event with _httprequestfailure" do
       expect(event).to_not include('rest')
       expect(event.get('tags')).to include('_httprequestfailure')
+      events.each do |event|
+        expect(event).to_not include('rest')
+        expect(event.get('tags')).to include('_httprequestfailure')
+      end
     end
   end
   describe "headers" do
@@ -83,8 +99,9 @@ describe LogStash::Filters::Http do
       it "are included in the request" do
         expect(subject).to receive(:request_http) do |verb, url, options|
           expect(options.fetch(:headers, {})).to include(headers)
-        end.and_return(response)
+        end.twice.and_return(response)
         subject.filter(event)
+        subject.multi_filter(events)
       end
     end
   end
@@ -101,8 +118,9 @@ describe LogStash::Filters::Http do
         }
       end
       it "are included in the request" do
-        expect(subject).to receive(:request_http).with(anything, anything, include(:query => query)).and_return(response)
+        expect(subject).to receive(:request_http).with(anything, anything, include(:query => query)).and_return(response).twice
         subject.filter(event)
+        subject.multi_filter(events)
       end
     end
   end
@@ -135,14 +153,16 @@ describe LogStash::Filters::Http do
         it "serializes the body to json" do
           expect(subject).to receive(:request_http) do |verb, url, options|
             expect(options).to include(:body => body_json)
-          end.and_return(response)
+          end.twice.and_return(response)
           subject.filter(event)
+          subject.multi_filter(events)
         end
         it "sets content-type to application/json" do
           expect(subject).to receive(:request_http) do |verb, url, options|
             expect(options).to include(:headers => { "content-type" => "application/json"})
-          end.and_return(response)
+          end.twice.and_return(response)
           subject.filter(event)
+          subject.multi_filter(events)
         end
       end
       context "when is text" do
@@ -152,14 +172,16 @@ describe LogStash::Filters::Http do
         it "uses the text as body for the request" do
           expect(subject).to receive(:request_http) do |verb, url, options|
             expect(options).to include(:body => body)
-          end.and_return(response)
+          end.twice.and_return(response)
           subject.filter(event)
+          subject.multi_filter(events)
         end
         it "sets content-type to text/plain" do
           expect(subject).to receive(:request_http) do |verb, url, options|
             expect(options).to include(:headers => { "content-type" => "text/plain"})
-          end.and_return(response)
+          end.twice.and_return(response)
           subject.filter(event)
+          subject.multi_filter(events)
         end
       end
     end
@@ -183,8 +205,9 @@ describe LogStash::Filters::Http do
           body = options.fetch(:body, {})
           expect(body.keys).to include("mykey")
           expect(body.fetch("mykey")).to eq(["normal value", "another_value", { "key" => "other-value2" }])
-        end.and_return(response)
+        end.twice.and_return(response)
         subject.filter(event)
+        subject.multi_filter(events)
       end
     end
   end
@@ -202,8 +225,9 @@ describe LogStash::Filters::Http do
       context "when verb #{verb_string} is set" do
         before(:each) { subject.register }
         it "it is used in the request" do
-          expect(subject).to receive(:request_http).with(verb.downcase, anything, anything).and_return(response)
+          expect(subject).to receive(:request_http).with(verb.downcase, anything, anything).and_return(response).twice
           subject.filter(event)
+          subject.multi_filter(events)
         end
       end
     end

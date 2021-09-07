@@ -78,6 +78,64 @@ class LogStash::Filters::Http < LogStash::Filters::Base
     end
   end # def filter
 
+  def multi_filter(events)
+    result = []
+    events.each do |event|
+      result << event unless event.cancelled?
+    end
+    event = events[0]
+    if event != nil
+      url_for_event = event.sprintf(@url)
+      headers_sprintfed = sprintf_object(event, @headers)
+      if body_format == "json"
+        headers_sprintfed["content-type"] = "application/json"
+      else
+        headers_sprintfed["content-type"] = "text/plain"
+      end
+      query_sprintfed = sprintf_object(event, @query)
+      body_sprintfed = sprintf_object(event, @body)
+      # we don't need to serialize strings and numbers
+      if @body_format == "json" && body_sprintfed.kind_of?(Enumerable)
+        body_sprintfed = LogStash::Json.dump(body_sprintfed)
+      end
+
+      options = { :headers => headers_sprintfed, :query => query_sprintfed, :body => body_sprintfed }
+
+      @logger.debug? && @logger.debug('processing request', :url => url_for_event, :headers => headers_sprintfed, :query => query_sprintfed)
+      client_error = nil
+
+      begin
+        code, response_headers, response_body = request_http(@verb, url_for_event, options)
+      rescue => e
+        client_error = e
+      end
+
+      if client_error
+        @logger.error('error during HTTP request',
+                      :url => url_for_event, :body => body_sprintfed,
+                      :client_error => client_error.message)
+        events.each do |e|
+          @tag_on_request_failure.each { |tag| e.tag(tag) }
+        end 
+      elsif !code.between?(200, 299)
+        @logger.error('error during HTTP request',
+                      :url => url_for_event, :code => code,
+                      :response => response_body)
+        events.each do |e|
+          @tag_on_request_failure.each { |tag| e.tag(tag) }
+        end 
+      else
+        @logger.debug? && @logger.debug('success received',
+                                        :code => code, :body => response_body)
+        process_response_batch(response_body, response_headers, events)
+        events.each do |e|
+          filter_matched(e)
+        end
+      end
+    end
+    result
+  end 
+
   private
   def request_http(verb, url, options = {})
     response = client.http(verb, url, options)
@@ -114,6 +172,34 @@ class LogStash::Filters::Http < LogStash::Filters::Base
       end
     else
       event.set(@target_body, body.strip)
+    end
+  end
+
+  def process_response_batch(body, headers, events)
+    content_type, _ = headers.fetch("content-type", "").split(";")
+    events.each do |event|
+      event.set(@target_headers, headers)
+    end
+    if content_type == "application/json"
+      begin
+        parsed = LogStash::Json.load(body)
+        events.each do |event|
+         event.set(@target_body, parsed)
+        end
+      rescue => e
+        if @logger.debug?
+          @logger.warn('JSON parsing error', :message => e.message, :body => body)
+        else
+          @logger.warn('JSON parsing error', :message => e.message)
+        end
+        events.each do |event|
+          @tag_on_json_failure.each { |tag| event.tag(tag) }
+        end 
+      end
+    else
+      events.each do |event|
+        event.set(@target_body, body.strip)
+      end
     end
   end
 
