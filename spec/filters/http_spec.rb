@@ -13,7 +13,7 @@ describe LogStash::Filters::Http do
     before(:each) { subject.register }
     let(:url) { 'http://laceholder.typicode.com/users/10' }
     let(:config) do
-      { "url" => url, "target_body" => 'rest' }
+      { "url" => url, "target_body" => 'rest', "per_batch" => true }
     end
     before(:each) do
       allow(subject).to receive(:request_http).and_return(response)
@@ -48,7 +48,7 @@ describe LogStash::Filters::Http do
     before(:each) { subject.register }
     context "when url contains field references" do
       let(:config) do
-        { "url" => "http://stringsize.com/%{message}", "target_body" => "size" }
+        { "url" => "http://stringsize.com/%{message}", "target_body" => "size", "per_batch" => true  }
       end
       let(:response) { [200, {}, "4"] }
 
@@ -64,7 +64,8 @@ describe LogStash::Filters::Http do
     let(:config) do
       {
         'url' => 'http://httpstat.us/404',
-        'target_body' => 'rest'
+        'target_body' => 'rest',
+        "per_batch" => true 
       }
     end
     let(:response) { [404, {}, ""] }
@@ -93,7 +94,8 @@ describe LogStash::Filters::Http do
         {
           "url" => "http://stringsize.com",
           "target_body" => "size",
-          "headers" => headers
+          "headers" => headers,
+          "per_batch" => true 
         }
       end
       it "are included in the request" do
@@ -114,7 +116,8 @@ describe LogStash::Filters::Http do
         {
           "url" => "http://stringsize.com/%{message}",
           "target_body" => "size",
-          "query" => query
+          "query" => query,
+          "per_batch" => true 
         }
       end
       it "are included in the request" do
@@ -130,7 +133,8 @@ describe LogStash::Filters::Http do
     let(:config) do
       {
         "url" => "http://stringsize.com",
-        "body" => body
+        "body" => body,
+        "per_batch" => true 
       }
     end
 
@@ -139,7 +143,8 @@ describe LogStash::Filters::Http do
         {
           "url" => "http://stringsize.com",
           "body_format" => body_format,
-          "body" => body
+          "body" => body,
+          "per_batch" => true 
         }
       end
 
@@ -217,7 +222,8 @@ describe LogStash::Filters::Http do
       {
         "verb" => verb,
         "url" => "http://stringsize.com",
-        "target_body" => "size"
+        "target_body" => "size",
+        "per_batch" => true 
       }
     end
     ["GET", "HEAD", "POST", "DELETE"].each do |verb_string|

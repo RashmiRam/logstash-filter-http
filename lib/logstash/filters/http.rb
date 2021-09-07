@@ -23,6 +23,7 @@ class LogStash::Filters::Http < LogStash::Filters::Base
 
   config :target_body, :validate => :string, :default => "body"
   config :target_headers, :validate => :string, :default => "headers"
+  config :per_batch, :validate => :boolean, :default => false
 
   # Append values to the `tags` field when there has been no
   # successful match or json parsing error
@@ -79,6 +80,9 @@ class LogStash::Filters::Http < LogStash::Filters::Base
   end # def filter
 
   def multi_filter(events)
+    unless per_batch 
+      return super(events)
+    end
     result = []
     events.each do |event|
       result << event unless event.cancelled?
